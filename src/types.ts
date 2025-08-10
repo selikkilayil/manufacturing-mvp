@@ -11,6 +11,9 @@ export interface Material {
   unit: string;
   costPerUnit: number;
   stockQuantity: number;
+  type: 'raw_material' | 'consumable';
+  consumableType?: 'per_unit' | 'percentage' | 'fixed_per_wo';
+  allocationRate?: number;
 }
 
 export interface Product {
@@ -37,6 +40,7 @@ export interface Quotation {
   productId: string;
   quantity: number;
   materialCost: number;
+  consumableCost: number;
   sellingPrice: number;
   status: 'draft' | 'approved';
   createdAt: Date;
@@ -51,8 +55,22 @@ export interface WorkOrder {
     quantity: number;
     reserved: boolean;
   }>;
+  consumableAllocations?: Array<{
+    materialId: string;
+    allocatedQuantity: number;
+    allocatedCost: number;
+  }>;
   createdAt: Date;
   completedAt?: Date;
+}
+
+export interface FinishedGood {
+  id: string;
+  productId: string;
+  quantity: number;
+  unitCost: number;
+  createdAt: Date;
+  workOrderId?: string;
 }
 
 export interface InfoMessage {

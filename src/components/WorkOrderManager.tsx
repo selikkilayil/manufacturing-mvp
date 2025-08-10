@@ -106,6 +106,20 @@ export const WorkOrderManager: React.FC<WorkOrderManagerProps> = ({ onMessage })
 
               const allMaterialsReserved = workOrder.materialReservations.every(r => r.reserved);
               
+              // Check consumable availability
+              let consumableShortages: string[] = [];
+              if (workOrder.consumableAllocations && workOrder.consumableAllocations.length > 0) {
+                workOrder.consumableAllocations.forEach(allocation => {
+                  const consumable = materials.find(m => m.id === allocation.materialId);
+                  if (consumable && consumable.stockQuantity < allocation.allocatedQuantity) {
+                    consumableShortages.push(`${consumable.name}: need ${allocation.allocatedQuantity.toFixed(2)}, have ${consumable.stockQuantity}`);
+                  }
+                });
+              }
+              
+              const hasConsumableShortages = consumableShortages.length > 0;
+              const canStartProduction = allMaterialsReserved && !hasConsumableShortages;
+              
               return (
                 <div key={workOrder.id} className={`work-order-card ${workOrder.status}`}>
                   <div className="wo-header">
@@ -149,8 +163,33 @@ export const WorkOrderManager: React.FC<WorkOrderManagerProps> = ({ onMessage })
                     </table>
                   </div>
 
+                  {workOrder.consumableAllocations && workOrder.consumableAllocations.length > 0 && (
+                    <div className="consumable-allocations">
+                      <h5>Consumable Allocations:</h5>
+                      <table>
+                        <thead>
+                          <tr>
+                            <th>Consumable</th>
+                            <th>Allocated Qty</th>
+                            <th>Cost</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {workOrder.consumableAllocations.map((allocation, index) => (
+                            <tr key={index}>
+                              <td>{getMaterialName(allocation.materialId)}</td>
+                              <td>{allocation.allocatedQuantity.toFixed(2)}</td>
+                              <td>${allocation.allocatedCost.toFixed(2)}</td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <p><strong>Total Consumable Cost: ${workOrder.consumableAllocations.reduce((sum, alloc) => sum + alloc.allocatedCost, 0).toFixed(2)}</strong></p>
+                    </div>
+                  )}
+
                   <div className="wo-actions">
-                    {workOrder.status === 'pending' && allMaterialsReserved && (
+                    {workOrder.status === 'pending' && canStartProduction && (
                       <button 
                         onClick={() => startProduction(workOrder.id)}
                         className="start-production-btn"
@@ -161,6 +200,10 @@ export const WorkOrderManager: React.FC<WorkOrderManagerProps> = ({ onMessage })
                     
                     {workOrder.status === 'pending' && !allMaterialsReserved && (
                       <p className="shortage-warning">⚠️ Cannot start: Material shortages detected</p>
+                    )}
+                    
+                    {workOrder.status === 'pending' && allMaterialsReserved && hasConsumableShortages && (
+                      <p className="shortage-warning">⚠️ Cannot start: Consumable shortages - {consumableShortages.join(', ')}</p>
                     )}
                     
                     {workOrder.status === 'in_progress' && (

@@ -7,6 +7,7 @@ import { ProductManager } from './components/ProductManager';
 import { BOMManager } from './components/BOMManager';
 import { QuotationManager } from './components/QuotationManager';
 import { WorkOrderManager } from './components/WorkOrderManager';
+import { InventoryManager } from './components/InventoryManager';
 import { MessageCenter } from './components/MessageCenter';
 import { store } from './store';
 import { InfoMessage } from './types';
@@ -39,6 +40,7 @@ function App() {
             <li><Link to="/bom">BOMs</Link></li>
             <li><Link to="/quotations">Quotations</Link></li>
             <li><Link to="/work-orders">Work Orders</Link></li>
+            <li><Link to="/inventory">Inventory</Link></li>
           </ul>
         </nav>
 
@@ -57,6 +59,7 @@ function App() {
               <Route path="/bom" element={<BOMManager onMessage={handleMessage} />} />
               <Route path="/quotations" element={<QuotationManager onMessage={handleMessage} />} />
               <Route path="/work-orders" element={<WorkOrderManager onMessage={handleMessage} />} />
+              <Route path="/inventory" element={<InventoryManager onMessage={handleMessage} />} />
             </Routes>
           </main>
         </div>

@@ -12,13 +12,32 @@ export const Dashboard: React.FC<DashboardProps> = ({ onMessage }) => {
   const [boms] = useState(store.getBOMs());
   const [quotations] = useState(store.getQuotations());
   const [workOrders] = useState(store.getWorkOrders());
+  const [finishedGoods] = useState(store.getFinishedGoods());
 
   const getTotalInventoryValue = (): number => {
-    return materials.reduce((sum, material) => sum + (material.stockQuantity * material.costPerUnit), 0);
+    const materialsValue = materials.reduce((sum, material) => sum + (material.stockQuantity * material.costPerUnit), 0);
+    const finishedGoodsValue = finishedGoods.reduce((sum, fg) => sum + (fg.quantity * fg.unitCost), 0);
+    return materialsValue + finishedGoodsValue;
+  };
+
+  const getFinishedGoodsValue = (): number => {
+    return finishedGoods.reduce((sum, fg) => sum + (fg.quantity * fg.unitCost), 0);
+  };
+
+  const getTotalFinishedGoodsQuantity = (): number => {
+    return finishedGoods.reduce((sum, fg) => sum + fg.quantity, 0);
   };
 
   const getLowStockMaterials = () => {
     return materials.filter(material => material.stockQuantity <= 10);
+  };
+
+  const getRawMaterials = () => {
+    return materials.filter(material => material.type === 'raw_material');
+  };
+
+  const getConsumables = () => {
+    return materials.filter(material => material.type === 'consumable');
   };
 
   const getPendingQuotations = () => {
@@ -76,14 +95,15 @@ export const Dashboard: React.FC<DashboardProps> = ({ onMessage }) => {
           <h3>Inventory Overview</h3>
           <div className="inventory-overview">
             <p><strong>Total Inventory Value: ${getTotalInventoryValue().toFixed(2)}</strong></p>
-            <p>Materials in Stock: {materials.length}</p>
+            <p>Raw Materials: {getRawMaterials().length} | Consumables: {getConsumables().length}</p>
+            <p>Finished Goods: {getTotalFinishedGoodsQuantity()} units (${getFinishedGoodsValue().toFixed(2)})</p>
             {getLowStockMaterials().length > 0 && (
               <div className="warning">
                 <p><strong>⚠️ Low Stock Alerts:</strong></p>
                 <ul>
                   {getLowStockMaterials().map(material => (
                     <li key={material.id}>
-                      {material.name}: {material.stockQuantity} {material.unit}
+                      {material.name} ({material.type === 'consumable' ? 'Consumable' : 'Raw Material'}): {material.stockQuantity} {material.unit}
                     </li>
                   ))}
                 </ul>

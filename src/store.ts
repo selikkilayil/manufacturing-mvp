@@ -1,4 +1,4 @@
-import { Customer, Material, Product, BOM, Quotation, WorkOrder, InfoMessage } from './types';
+import { Customer, Material, Product, BOM, Quotation, WorkOrder, FinishedGood, InfoMessage } from './types';
 
 class Store {
   private customers: Customer[] = [];
@@ -7,6 +7,7 @@ class Store {
   private boms: BOM[] = [];
   private quotations: Quotation[] = [];
   private workOrders: WorkOrder[] = [];
+  private finishedGoods: FinishedGood[] = [];
   private messages: InfoMessage[] = [];
 
   constructor() {
@@ -27,6 +28,10 @@ class Store {
         ...wo,
         createdAt: wo.createdAt.toISOString(),
         completedAt: wo.completedAt?.toISOString()
+      }))));
+      localStorage.setItem('manufacturing-finishedgoods', JSON.stringify(this.finishedGoods.map(fg => ({
+        ...fg,
+        createdAt: fg.createdAt.toISOString()
       }))));
       localStorage.setItem('manufacturing-messages', JSON.stringify(this.messages));
     } catch (error) {
@@ -62,6 +67,14 @@ class Store {
           ...wo,
           createdAt: new Date(wo.createdAt),
           completedAt: wo.completedAt ? new Date(wo.completedAt) : undefined
+        }));
+      }
+
+      const finishedGoods = localStorage.getItem('manufacturing-finishedgoods');
+      if (finishedGoods) {
+        this.finishedGoods = JSON.parse(finishedGoods).map((fg: any) => ({
+          ...fg,
+          createdAt: new Date(fg.createdAt)
         }));
       }
 
@@ -235,11 +248,41 @@ class Store {
       };
     });
 
+    // Calculate consumable allocations
+    const consumableAllocations = this.materials
+      .filter(m => m.type === 'consumable' && m.consumableType && m.allocationRate)
+      .map(consumable => {
+        let allocatedQuantity = 0;
+        let allocatedCost = 0;
+
+        switch (consumable.consumableType) {
+          case 'per_unit':
+            allocatedQuantity = consumable.allocationRate! * quotation.quantity;
+            allocatedCost = consumable.costPerUnit * allocatedQuantity;
+            break;
+          case 'percentage':
+            allocatedCost = quotation.materialCost * (consumable.allocationRate! / 100);
+            allocatedQuantity = allocatedCost / consumable.costPerUnit;
+            break;
+          case 'fixed_per_wo':
+            allocatedQuantity = consumable.allocationRate!;
+            allocatedCost = consumable.costPerUnit * allocatedQuantity;
+            break;
+        }
+
+        return {
+          materialId: consumable.id,
+          allocatedQuantity,
+          allocatedCost
+        };
+      });
+
     const workOrder: WorkOrder = {
       id: `WO-${Date.now()}`,
       quotationId,
       status: 'pending',
       materialReservations,
+      consumableAllocations,
       createdAt: new Date()
     };
 
@@ -253,7 +296,12 @@ class Store {
     let messageText = `Work Order ${workOrder.id} created for ${customer?.name}: ${quotation.quantity}x ${product?.name}. `;
     
     if (allReserved) {
-      messageText += 'All materials reserved from inventory. Ready for production.';
+      messageText += 'All materials reserved from inventory. ';
+      if (consumableAllocations.length > 0) {
+        const totalConsumableCost = consumableAllocations.reduce((sum, alloc) => sum + alloc.allocatedCost, 0);
+        messageText += `Consumables allocated: $${totalConsumableCost.toFixed(2)}. `;
+      }
+      messageText += 'Ready for production.';
     } else {
       const shortages = materialReservations
         .filter(r => !r.reserved)
@@ -287,11 +335,30 @@ class Store {
       };
     }
 
+    // Check consumable availability
+    let consumableShortages: string[] = [];
+    if (workOrder.consumableAllocations && workOrder.consumableAllocations.length > 0) {
+      workOrder.consumableAllocations.forEach(allocation => {
+        const consumable = this.materials.find(m => m.id === allocation.materialId);
+        if (consumable && consumable.stockQuantity < allocation.allocatedQuantity) {
+          const shortage = allocation.allocatedQuantity - consumable.stockQuantity;
+          consumableShortages.push(`${consumable.name}: need ${allocation.allocatedQuantity.toFixed(2)}, have ${consumable.stockQuantity}`);
+        }
+      });
+    }
+
+    if (consumableShortages.length > 0) {
+      return {
+        type: 'warning',
+        message: `Cannot start production: consumable shortages detected: ${consumableShortages.join(', ')}. Restock required first.`
+      };
+    }
+
     workOrder.status = 'in_progress';
     this.saveToLocalStorage();
     const message: InfoMessage = {
       type: 'info',
-      message: `Production started for Work Order ${workOrder.id}. Materials being consumed from inventory.`
+      message: `Production started for Work Order ${workOrder.id}. Materials and consumables being consumed from inventory.`
     };
     this.addMessage(message);
     return message;
@@ -303,6 +370,20 @@ class Store {
       return null;
     }
 
+    // Consume consumables from inventory
+    let consumableConsumptionDetails: string[] = [];
+    if (workOrder.consumableAllocations && workOrder.consumableAllocations.length > 0) {
+      workOrder.consumableAllocations.forEach(allocation => {
+        const consumable = this.materials.find(m => m.id === allocation.materialId);
+        if (consumable) {
+          const beforeQuantity = consumable.stockQuantity;
+          consumable.stockQuantity = Math.max(0, consumable.stockQuantity - allocation.allocatedQuantity);
+          const consumed = beforeQuantity - consumable.stockQuantity;
+          consumableConsumptionDetails.push(`${consumable.name}: -${consumed.toFixed(2)} ${consumable.unit}`);
+        }
+      });
+    }
+
     workOrder.status = 'completed';
     workOrder.completedAt = new Date();
     this.saveToLocalStorage();
@@ -310,15 +391,57 @@ class Store {
     const quotation = this.quotations.find(q => q.id === workOrder.quotationId);
     if (quotation) {
       const product = this.products.find(p => p.id === quotation.productId);
+      
+      // Calculate unit cost (material cost + consumable cost) / quantity
+      const totalCost = quotation.materialCost + (quotation.consumableCost || 0);
+      const unitCost = totalCost / quotation.quantity;
+      
+      // Add finished goods to inventory
+      const finishedGood: FinishedGood = {
+        id: `FG-${Date.now()}`,
+        productId: quotation.productId,
+        quantity: quotation.quantity,
+        unitCost: unitCost,
+        createdAt: new Date(),
+        workOrderId: workOrder.id
+      };
+      
+      this.addFinishedGood(finishedGood);
+      
+      let messageText = `Production completed for Work Order ${workOrder.id}. ${quotation.quantity}x ${product?.name} added to finished goods inventory (Unit cost: $${unitCost.toFixed(2)}).`;
+      
+      if (consumableConsumptionDetails.length > 0) {
+        messageText += ` Consumables consumed: ${consumableConsumptionDetails.join(', ')}.`;
+      }
+      
       const message: InfoMessage = {
         type: 'success',
-        message: `Production completed for Work Order ${workOrder.id}. ${quotation.quantity}x ${product?.name} added to finished goods inventory.`
+        message: messageText
       };
       this.addMessage(message);
       return message;
     }
 
     return null;
+  }
+
+  getFinishedGoods(): FinishedGood[] {
+    return [...this.finishedGoods];
+  }
+
+  addFinishedGood(finishedGood: FinishedGood): void {
+    this.finishedGoods.push(finishedGood);
+    this.saveToLocalStorage();
+  }
+
+  getFinishedGoodsByProductId(productId: string): FinishedGood[] {
+    return this.finishedGoods.filter(fg => fg.productId === productId);
+  }
+
+  getTotalFinishedGoodsQuantity(productId: string): number {
+    return this.finishedGoods
+      .filter(fg => fg.productId === productId)
+      .reduce((sum, fg) => sum + fg.quantity, 0);
   }
 
   getMessages(): InfoMessage[] {
@@ -345,6 +468,7 @@ class Store {
     this.boms = [];
     this.quotations = [];
     this.workOrders = [];
+    this.finishedGoods = [];
     this.messages = [];
     localStorage.removeItem('manufacturing-customers');
     localStorage.removeItem('manufacturing-materials');
@@ -352,6 +476,7 @@ class Store {
     localStorage.removeItem('manufacturing-boms');
     localStorage.removeItem('manufacturing-quotations');
     localStorage.removeItem('manufacturing-workorders');
+    localStorage.removeItem('manufacturing-finishedgoods');
     localStorage.removeItem('manufacturing-messages');
   }
 }

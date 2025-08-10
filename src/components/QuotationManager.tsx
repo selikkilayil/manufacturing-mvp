@@ -25,6 +25,8 @@ export const QuotationManager: React.FC<QuotationManagerProps> = ({ onMessage })
     isService: false
   });
   const [calculatedCost, setCalculatedCost] = useState<number>(0);
+  const [materialCostBreakdown, setMaterialCostBreakdown] = useState<number>(0);
+  const [consumableCostBreakdown, setConsumableCostBreakdown] = useState<number>(0);
   const [manualPricing, setManualPricing] = useState<boolean>(false);
 
   const calculateMaterialCost = (productId: string, quantity: number): number => {
@@ -34,20 +36,48 @@ export const QuotationManager: React.FC<QuotationManagerProps> = ({ onMessage })
     const materials = store.getMaterials();
     return bom.items.reduce((total, bomItem) => {
       const material = materials.find(m => m.id === bomItem.materialId);
-      if (material) {
+      if (material && material.type === 'raw_material') {
         return total + (material.costPerUnit * bomItem.quantity * quantity);
       }
       return total;
     }, 0);
   };
 
+  const calculateConsumableCost = (productId: string, quantity: number, materialCost: number): number => {
+    const materials = store.getMaterials();
+    const consumables = materials.filter(m => m.type === 'consumable');
+    
+    return consumables.reduce((total, consumable) => {
+      if (!consumable.consumableType || !consumable.allocationRate) return total;
+      
+      let consumableCost = 0;
+      switch (consumable.consumableType) {
+        case 'per_unit':
+          consumableCost = consumable.costPerUnit * consumable.allocationRate * quantity;
+          break;
+        case 'percentage':
+          consumableCost = materialCost * (consumable.allocationRate / 100);
+          break;
+        case 'fixed_per_wo':
+          consumableCost = consumable.costPerUnit * consumable.allocationRate;
+          break;
+      }
+      return total + consumableCost;
+    }, 0);
+  };
+
   const handleProductOrQuantityChange = () => {
     if (formData.productId && formData.quantity && !manualPricing) {
-      const cost = calculateMaterialCost(formData.productId, parseInt(formData.quantity));
-      setCalculatedCost(cost);
+      const materialCost = calculateMaterialCost(formData.productId, parseInt(formData.quantity));
+      const consumableCost = calculateConsumableCost(formData.productId, parseInt(formData.quantity), materialCost);
+      const totalCost = materialCost + consumableCost;
       
-      if (cost > 0) {
-        const suggestedPrice = cost * 1.3;
+      setMaterialCostBreakdown(materialCost);
+      setConsumableCostBreakdown(consumableCost);
+      setCalculatedCost(totalCost);
+      
+      if (totalCost > 0) {
+        const suggestedPrice = totalCost * 1.3;
         setFormData(prev => ({ ...prev, sellingPrice: suggestedPrice.toFixed(2) }));
       }
     }
@@ -98,7 +128,14 @@ export const QuotationManager: React.FC<QuotationManagerProps> = ({ onMessage })
     
     // Allow quotations without BOM if it's manual pricing (service items, one-time products)
     const bom = store.getBOMByProductId(formData.productId);
-    const finalMaterialCost = manualPricing ? 0 : calculatedCost;
+    
+    let finalMaterialCost = 0;
+    let finalConsumableCost = 0;
+    
+    if (!manualPricing) {
+      finalMaterialCost = calculateMaterialCost(formData.productId, parseInt(formData.quantity));
+      finalConsumableCost = calculateConsumableCost(formData.productId, parseInt(formData.quantity), finalMaterialCost);
+    }
     
     if (!bom && !manualPricing) {
       onMessage('Cannot create quotation: No BOM defined for this product. Enable manual pricing for service items.');
@@ -111,6 +148,7 @@ export const QuotationManager: React.FC<QuotationManagerProps> = ({ onMessage })
       productId: formData.productId,
       quantity: parseInt(formData.quantity),
       materialCost: finalMaterialCost,
+      consumableCost: finalConsumableCost,
       sellingPrice: parseFloat(formData.sellingPrice),
       status: 'draft',
       createdAt: new Date()
@@ -253,7 +291,9 @@ export const QuotationManager: React.FC<QuotationManagerProps> = ({ onMessage })
 
           {calculatedCost > 0 && !manualPricing && (
             <div className="cost-calculation">
-              <p><strong>Material Cost: ${calculatedCost.toFixed(2)}</strong></p>
+              <p><strong>Raw Material Cost: ${materialCostBreakdown.toFixed(2)}</strong></p>
+              <p><strong>Consumable Cost: ${consumableCostBreakdown.toFixed(2)}</strong></p>
+              <p><strong>Total Cost: ${calculatedCost.toFixed(2)}</strong></p>
               <p>Cost per Unit: ${(calculatedCost / parseInt(formData.quantity || '1')).toFixed(2)}</p>
             </div>
           )}
@@ -303,7 +343,9 @@ export const QuotationManager: React.FC<QuotationManagerProps> = ({ onMessage })
                 <p><strong>Unit Price:</strong> ${quotation.sellingPrice.toFixed(2)}</p>
                 <p><strong>Total Value:</strong> ${(quotation.sellingPrice * quotation.quantity).toFixed(2)}</p>
                 <p><strong>Material Cost:</strong> ${quotation.materialCost.toFixed(2)}</p>
-                <p><strong>Profit:</strong> ${(quotation.sellingPrice * quotation.quantity - quotation.materialCost).toFixed(2)}</p>
+                <p><strong>Consumable Cost:</strong> ${(quotation.consumableCost || 0).toFixed(2)}</p>
+                <p><strong>Total Cost:</strong> ${(quotation.materialCost + (quotation.consumableCost || 0)).toFixed(2)}</p>
+                <p><strong>Profit:</strong> ${(quotation.sellingPrice * quotation.quantity - quotation.materialCost - (quotation.consumableCost || 0)).toFixed(2)}</p>
                 <p><strong>Created:</strong> {quotation.createdAt.toLocaleDateString()}</p>
                 
                 {quotation.status === 'draft' && (

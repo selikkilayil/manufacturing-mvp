@@ -13,7 +13,10 @@ export const MaterialManager: React.FC<MaterialManagerProps> = ({ onMessage }) =
     name: '',
     unit: '',
     costPerUnit: '',
-    stockQuantity: ''
+    stockQuantity: '',
+    type: 'raw_material' as 'raw_material' | 'consumable',
+    consumableType: 'per_unit' as 'per_unit' | 'percentage' | 'fixed_per_wo',
+    allocationRate: ''
   });
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -24,14 +27,25 @@ export const MaterialManager: React.FC<MaterialManagerProps> = ({ onMessage }) =
       name: formData.name,
       unit: formData.unit,
       costPerUnit: parseFloat(formData.costPerUnit),
-      stockQuantity: parseInt(formData.stockQuantity)
+      stockQuantity: parseInt(formData.stockQuantity),
+      type: formData.type,
+      consumableType: formData.type === 'consumable' ? formData.consumableType : undefined,
+      allocationRate: formData.type === 'consumable' && formData.allocationRate ? parseFloat(formData.allocationRate) : undefined
     };
 
     const message = store.addMaterial(newMaterial);
     setMaterials(store.getMaterials());
     onMessage(message.message);
     
-    setFormData({ name: '', unit: '', costPerUnit: '', stockQuantity: '' });
+    setFormData({ 
+      name: '', 
+      unit: '', 
+      costPerUnit: '', 
+      stockQuantity: '', 
+      type: 'raw_material', 
+      consumableType: 'per_unit',
+      allocationRate: '' 
+    });
     setShowForm(false);
   };
 
@@ -46,7 +60,7 @@ export const MaterialManager: React.FC<MaterialManagerProps> = ({ onMessage }) =
   return (
     <div className="material-manager">
       <div className="header">
-        <h2>Raw Materials Management</h2>
+        <h2>Materials & Consumables Management</h2>
         <button onClick={() => setShowForm(!showForm)}>
           {showForm ? 'Cancel' : 'Add Material'}
         </button>
@@ -84,6 +98,51 @@ export const MaterialManager: React.FC<MaterialManagerProps> = ({ onMessage }) =
             onChange={(e) => setFormData({ ...formData, stockQuantity: e.target.value })}
             required
           />
+          
+          <select
+            value={formData.type}
+            onChange={(e) => setFormData({ 
+              ...formData, 
+              type: e.target.value as 'raw_material' | 'consumable',
+              consumableType: e.target.value === 'consumable' ? formData.consumableType : 'per_unit',
+              allocationRate: e.target.value === 'consumable' ? formData.allocationRate : ''
+            })}
+            required
+          >
+            <option value="raw_material">Raw Material</option>
+            <option value="consumable">Consumable</option>
+          </select>
+          
+          {formData.type === 'consumable' && (
+            <>
+              <select
+                value={formData.consumableType}
+                onChange={(e) => setFormData({ 
+                  ...formData, 
+                  consumableType: e.target.value as 'per_unit' | 'percentage' | 'fixed_per_wo'
+                })}
+                required
+              >
+                <option value="per_unit">Per Unit (consumed per product unit)</option>
+                <option value="percentage">Percentage (% of material cost)</option>
+                <option value="fixed_per_wo">Fixed per Work Order</option>
+              </select>
+              
+              <input
+                type="number"
+                step="0.01"
+                placeholder={
+                  formData.consumableType === 'per_unit' ? 'Quantity per product unit' :
+                  formData.consumableType === 'percentage' ? 'Percentage (e.g., 5 for 5%)' :
+                  'Fixed quantity per work order'
+                }
+                value={formData.allocationRate}
+                onChange={(e) => setFormData({ ...formData, allocationRate: e.target.value })}
+                required
+              />
+            </>
+          )}
+          
           <button type="submit">Add Material</button>
         </form>
       )}
@@ -98,9 +157,11 @@ export const MaterialManager: React.FC<MaterialManagerProps> = ({ onMessage }) =
               <tr>
                 <th>ID</th>
                 <th>Name</th>
+                <th>Type</th>
                 <th>Unit</th>
                 <th>Cost/Unit</th>
                 <th>Stock</th>
+                <th>Allocation</th>
                 <th>Total Value</th>
                 <th>Actions</th>
               </tr>
@@ -110,12 +171,26 @@ export const MaterialManager: React.FC<MaterialManagerProps> = ({ onMessage }) =
                 <tr key={material.id}>
                   <td>{material.id}</td>
                   <td>{material.name}</td>
+                  <td>
+                    <span className={material.type === 'consumable' ? 'consumable-type' : 'raw-material-type'}>
+                      {material.type === 'consumable' ? 'Consumable' : 'Raw Material'}
+                    </span>
+                  </td>
                   <td>{material.unit}</td>
                   <td>${material.costPerUnit.toFixed(2)}</td>
                   <td>
                     <span className={material.stockQuantity <= 10 ? 'low-stock' : ''}>
                       {material.stockQuantity} {material.unit}
                     </span>
+                  </td>
+                  <td>
+                    {material.type === 'consumable' && material.consumableType && material.allocationRate ? (
+                      <span className="allocation-info">
+                        {material.consumableType === 'per_unit' ? `${material.allocationRate} per unit` :
+                         material.consumableType === 'percentage' ? `${material.allocationRate}% of material cost` :
+                         `${material.allocationRate} per WO`}
+                      </span>
+                    ) : '-'}
                   </td>
                   <td>${(material.stockQuantity * material.costPerUnit).toFixed(2)}</td>
                   <td>

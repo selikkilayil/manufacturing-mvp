@@ -603,6 +603,68 @@ th {
   color: #856404;
 }
 
+/* Consumables Styles */
+.consumable-type {
+  background-color: #e7f3ff;
+  color: #0066cc;
+  padding: 0.2rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.raw-material-type {
+  background-color: #f0f0f0;
+  color: #666;
+  padding: 0.2rem 0.5rem;
+  border-radius: 12px;
+  font-size: 0.8rem;
+  font-weight: bold;
+}
+
+.allocation-info {
+  font-size: 0.85rem;
+  color: #495057;
+  font-style: italic;
+}
+
+/* Inventory Manager Styles */
+.inventory-manager .header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+}
+
+.inventory-manager .inventory-summary {
+  background-color: #e9ecef;
+  padding: 1rem;
+  border-radius: 4px;
+}
+
+.inventory-section {
+  margin-bottom: 3rem;
+}
+
+.inventory-section h3 {
+  color: #2c3e50;
+  border-bottom: 2px solid #3498db;
+  padding-bottom: 0.5rem;
+  margin-bottom: 1rem;
+}
+
+.inventory-section h4 {
+  color: #34495e;
+  margin-top: 2rem;
+  margin-bottom: 1rem;
+}
+
+.finished-goods-detail {
+  margin-top: 2rem;
+  border-top: 1px solid #dee2e6;
+  padding-top: 1rem;
+}
+
 /* Responsive */
 @media (max-width: 768px) {
   .nav-links {
