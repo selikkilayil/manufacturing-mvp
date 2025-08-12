@@ -341,7 +341,6 @@ class Store {
       workOrder.consumableAllocations.forEach(allocation => {
         const consumable = this.materials.find(m => m.id === allocation.materialId);
         if (consumable && consumable.stockQuantity < allocation.allocatedQuantity) {
-          const shortage = allocation.allocatedQuantity - consumable.stockQuantity;
           consumableShortages.push(`${consumable.name}: need ${allocation.allocatedQuantity.toFixed(2)}, have ${consumable.stockQuantity}`);
         }
       });

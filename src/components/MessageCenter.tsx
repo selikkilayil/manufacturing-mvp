@@ -1,6 +1,5 @@
 import React, { useState } from 'react';
 import { InfoMessage } from '../types';
-import { store } from '../store';
 
 interface MessageCenterProps {
   messages: InfoMessage[];
