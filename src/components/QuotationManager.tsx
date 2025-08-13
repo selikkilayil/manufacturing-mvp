@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import { Quotation } from '../types';
 import { store } from '../store';
 
@@ -66,7 +66,7 @@ export const QuotationManager: React.FC<QuotationManagerProps> = ({ onMessage })
     }, 0);
   };
 
-  const handleProductOrQuantityChange = () => {
+  const handleProductOrQuantityChange = useCallback(() => {
     if (formData.productId && formData.quantity && !manualPricing) {
       const materialCost = calculateMaterialCost(formData.productId, parseInt(formData.quantity));
       const consumableCost = calculateConsumableCost(formData.productId, parseInt(formData.quantity), materialCost);
@@ -81,7 +81,7 @@ export const QuotationManager: React.FC<QuotationManagerProps> = ({ onMessage })
         setFormData(prev => ({ ...prev, sellingPrice: suggestedPrice.toFixed(2) }));
       }
     }
-  };
+  }, [formData.productId, formData.quantity, manualPricing]);
 
   const handleQuickAddProduct = () => {
     if (!quickProductData.name) {
@@ -121,7 +121,7 @@ export const QuotationManager: React.FC<QuotationManagerProps> = ({ onMessage })
 
   React.useEffect(() => {
     handleProductOrQuantityChange();
-  }, [formData.productId, formData.quantity]);
+  }, [handleProductOrQuantityChange]);
 
   const handleSubmit = (e: React.FormEvent) => {
     e.preventDefault();
@@ -180,10 +180,6 @@ export const QuotationManager: React.FC<QuotationManagerProps> = ({ onMessage })
   const getProductName = (productId: string): string => {
     const product = products.find(p => p.id === productId);
     return product ? product.name : 'Unknown';
-  };
-
-  const getProductsWithBOM = () => {
-    return products.filter(product => store.getBOMByProductId(product.id));
   };
 
   return (
